@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Upload de Fotos - Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('admin') }}">Painel do Administrador</a>
+            <div class="d-flex ms-auto">
+                <a href="{{ url_for('logout') }}" class="btn btn-danger">Sair</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card p-4">
+                    <h2 class="text-center mb-4">Upload de Fotos para o Site</h2>
+                    <p class="text-muted text-center">Envie fotos para a galeria ou um novo banner para a página principal.</p>
+                    {% with messages = get_flashed_messages() %}
+                        {% if messages %}
+                            <div class="alert alert-info text-center" role="alert">{{ messages[0] }}</div>
+                        {% endif %}
+                    {% endwith %}
+                    <form action="{{ url_for('upload_fotos') }}" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="upload_type" class="form-label">Tipo de Upload</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="upload_type" id="galeria" value="galeria" checked required>
+                                <label class="form-check-label" for="galeria">
+                                    Fotos para a Galeria (Slideshow)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="upload_type" id="banner" value="banner" required>
+                                <label class="form-check-label" for="banner">
+                                    Banner da Conferência
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="fotos" class="form-label">Selecione a(s) Imagem(ns)</label>
+                            <input class="form-control" type="file" id="fotos" name="fotos" multiple accept="image/*">
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Fazer Upload</button>
+                        </div>
+                    </form>
+                    
+                    <hr class="my-5">
+
+                    <h2 class="text-center mb-4">Gerenciar Conteúdo Existente</h2>
+
+                    <div class="text-center">
+                        {% if latest_banner %}
+                        <div class="mb-4">
+                            <h4>Banner Atual</h4>
+                            <img src="{{ url_for('static', filename='banners/' + latest_banner) }}" alt="Banner Atual" class="img-fluid mb-2" style="max-height: 200px; object-fit: cover;">
+                            <form action="{{ url_for('excluir_banner') }}" method="post" onsubmit="return confirm('Tem certeza que deseja excluir o banner?');">
+                                <button type="submit" class="btn btn-danger btn-sm">Excluir Banner</button>
+                            </form>
+                        </div>
+                        {% else %}
+                        <div class="mb-4">
+                            <h4>Não há um banner definido.</h4>
+                            <p class="text-muted">Faça o upload de um novo banner acima.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-12">
+                            <h4 class="text-center mb-3">Galeria de Fotos</h4>
+                            {% if gallery_photos %}
+                            <div class="row">
+                                {% for photo in gallery_photos %}
+                                <div class="col-md-3 mb-4">
+                                    <div class="card">
+                                        <img src="{{ url_for('static', filename='galeria/' + photo) }}" class="card-img-top" alt="Foto da Galeria" style="height: 150px; object-fit: cover;">
+                                        <div class="card-body text-center">
+                                            <form action="{{ url_for('excluir_foto', filename=photo) }}" method="post" onsubmit="return confirm('Tem certeza que deseja excluir esta foto?');">
+                                                <button type="submit" class="btn btn-sm btn-danger w-100">Excluir</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <p class="text-center text-muted">Não há fotos na galeria.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
