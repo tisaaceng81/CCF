@@ -18,7 +18,7 @@
         </div>
     </nav>
     <div class="container my-5">
-        <h1 class="text-center mb-4">Gerenciar Inscrições</h1>
+        <h1 class="text-center mb-4">Gerenciar Inscrições (Total: {{ inscritos_count }})</h1>
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 <div class="alert alert-info text-center" role="alert">{{ messages[0] }}</div>
@@ -50,6 +50,7 @@
             <thead>
                 <tr>
                     <th>Nome Completo</th>
+                    <th>Nome Secundário</th>
                     <th>Email</th>
                     <th>Telefone</th>
                     <th>Tipo</th>
@@ -62,6 +63,7 @@
                 {% for id, inscrito in inscritos.items() %}
                 <tr>
                     <td>{{ inscrito.nome_completo }}</td>
+                    <td>{{ inscrito.nome_secundario if inscrito.nome_secundario else '-' }}</td>
                     <td>{{ inscrito.email }}</td>
                     <td>{{ inscrito.telefone }}</td>
                     <td>{{ inscrito.tipo_ingresso }}</td>
@@ -79,13 +81,14 @@
                         {% if not inscrito.validado %}
                             <a href="{{ url_for('validar_ingresso', ingresso_id=id) }}" class="btn btn-sm btn-success">Validar</a>
                         {% else %}
-                            <a href="{{ url_for('qr_code', ingresso_id=id) }}" class="btn btn-sm btn-info" target="_blank">Ver QR Code</a>
+                            <a href="{{ url_for('editar_ingresso', ingresso_id=id) }}" class="btn btn-sm btn-primary">Editar</a>
+                            <a href="{{ url_for('ingresso_pdf', filename='ingresso_' + id + '.pdf') }}" class="btn btn-sm btn-info" target="_blank">PDF</a>
                         {% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="text-center">Nenhum inscrito ainda.</td>
+                    <td colspan="8" class="text-center">Nenhum inscrito ainda.</td>
                 </tr>
                 {% endfor %}
             </tbody>

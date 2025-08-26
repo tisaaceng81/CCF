@@ -151,5 +151,39 @@
         <p class="mb-0">&copy; 2025 Comunidade Batista Casa Firme. Todos os direitos reservados. | Desenvolvido por Tiago Carneiro</p>
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const radioButtons = document.querySelectorAll('input[name="tipo_ingresso"]');
+            const form = document.querySelector('form');
+            let nomeSecundarioField = null;
+
+            function updateForm() {
+                const casadinhaSelected = document.getElementById('casadinha').checked;
+
+                if (casadinhaSelected) {
+                    if (!nomeSecundarioField) {
+                        nomeSecundarioField = document.createElement('div');
+                        nomeSecundarioField.className = 'mb-3';
+                        nomeSecundarioField.id = 'campo-casadinha';
+                        nomeSecundarioField.innerHTML = `
+                            <label for="nome_secundario" class="form-label">Nome da Segunda Pessoa</label>
+                            <input type="text" class="form-control" id="nome_secundario" name="nome_secundario" required>
+                        `;
+                        const comprovanteField = document.getElementById('comprovante_pix').closest('.mb-3');
+                        form.insertBefore(nomeSecundarioField, comprovanteField);
+                    }
+                } else {
+                    if (nomeSecundarioField) {
+                        nomeSecundarioField.remove();
+                        nomeSecundarioField = null;
+                    }
+                }
+            }
+
+            radioButtons.forEach(radio => {
+                radio.addEventListener('change', updateForm);
+            });
+        });
+    </script>
 </body>
 </html>
