@@ -4,7 +4,7 @@ import uuid
 import qrcode
 from PIL import Image
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
@@ -133,45 +133,40 @@ def admin():
 
 # --- Funções de Cabeçalho e Rodapé para o PDF ---
 
-def header_and_watermark(canvas_obj, doc):
+def header_and_footer_pdf(canvas_obj, doc):
     canvas_obj.saveState()
 
-    # Adicionar o logo 'Casa Firme' no canto superior esquerdo (timbre)
-    try:
-        logo_path = os.path.join(evento.static_folder, 'imagem', 'logo_casa_firme.jpg')
-        logo_img = ImageReader(logo_path)
-        canvas_obj.drawImage(logo_img, 50, A4[1] - 70, width=1.5 * inch, height=0.6 * inch)
-    except Exception as e:
-        print(f"Erro ao adicionar o logo no cabeçalho: {e}")
-
-    # Adicionar a marca d'água 'Casa Firme' transparente no centro
-    try:
-        logo_path = os.path.join(evento.static_folder, 'imagem', 'logo_casa_firme.jpg')
-        logo_img = ImageReader(logo_path)
-        
-        # Coordenadas e tamanho da marca d'água
-        img_width = 3 * inch
-        img_height = (img_width * logo_img.height) / logo_img.width
-        x_center = (A4[0] - img_width) / 2
-        y_center = (A4[1] - img_height) / 2
-        
-        canvas_obj.setFillAlpha(0.2)  # Define a transparência (20%)
-        canvas_obj.drawImage(logo_img, x_center, y_center, width=img_width, height=img_height, mask='auto')
-        canvas_obj.setFillAlpha(1.0)  # Volta a transparência para o padrão
-        
-    except Exception as e:
-        print(f"Erro ao adicionar a marca d'água do logo: {e}")
-
-    canvas_obj.restoreState()
-
-def footer(canvas_obj, doc):
-    canvas_obj.saveState()
-
-    # Adicionar o timbre de 'CONFIRMAÇÃO DE PAGAMENTO' no rodapé
-    canvas_obj.setFont('Helvetica-Bold', 12)
-    canvas_obj.setFillColorRGB(0.5, 0.5, 0.5)
-    canvas_obj.drawString(50, 30, "CONFIRMAÇÃO DE PAGAMENTO")
+    # Caminho da logo (agora como PNG, baseado na imagem fornecida)
+    logo_path = os.path.join(evento.static_folder, 'imagens', 'logo_casa_firme.png')
     
+    if os.path.exists(logo_path):
+        logo_pil_image = Image.open(logo_path)
+        logo_width_in_points = logo_pil_image.width
+        logo_height_in_points = logo_pil_image.height
+        logo_img_reader = ImageReader(logo_pil_image)
+
+        # Adicionar o logo 'Casa Firme' no canto superior esquerdo (timbre)
+        timbre_width = 1.5 * inch
+        timbre_height = (timbre_width * logo_height_in_points) / logo_width_in_points
+        canvas_obj.drawImage(logo_img_reader, 50, A4[1] - 70, width=timbre_width, height=timbre_height)
+
+        # Adicionar a marca d'água 'Casa Firme' transparente no centro
+        watermark_width = 4 * inch
+        watermark_height = (watermark_width * logo_height_in_points) / logo_width_in_points
+        x_center = (A4[0] - watermark_width) / 2
+        y_center = (A4[1] - watermark_height) / 2
+        
+        canvas_obj.setFillAlpha(0.15)  # Define a transparência (15% para ser sutil)
+        canvas_obj.drawImage(logo_img_reader, x_center, y_center, width=watermark_width, height=watermark_height, mask='auto')
+        canvas_obj.setFillAlpha(1.0)  # Volta a transparência para o padrão
+    else:
+        print(f"ATENÇÃO: A imagem da logo não foi encontrada em: {logo_path}")
+
+    # Adicionar o texto 'PAGO' no rodapé
+    canvas_obj.setFont('Helvetica-Bold', 12)
+    canvas_obj.setFillColorRGB(0, 0, 0) # Cor preta para o texto do rodapé
+    canvas_obj.drawCentredString(A4[0]/2, 30, "PAGO") # Centraliza o texto no rodapé
+
     canvas_obj.restoreState()
 
 
@@ -196,7 +191,7 @@ def validar_ingresso(ingresso_id):
         pdf_filename = f"ingresso_{ingresso_id}.pdf"
         pdf_path = os.path.join(evento.config['UPLOAD_FOLDER'], pdf_filename)
         
-        doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=36) # Aumentei o bottomMargin para o rodapé
         story = []
         styles = getSampleStyleSheet()
         
@@ -244,12 +239,12 @@ def validar_ingresso(ingresso_id):
         story.append(Spacer(1, 0.3*inch))
         
         # Adicionar QR Code
-        qr_code_pdf_image = Image(qr_code_path_temp, width=2.5*inch, height=2.5*inch)
+        qr_code_pdf_image = RLImage(qr_code_path_temp, width=2.5*inch, height=2.5*inch)
         story.append(qr_code_pdf_image)
         story.append(Paragraph("Apresente este QR Code na entrada do evento para validação.", styles['Italic']))
 
         # Construir o documento aplicando as funções de cabeçalho e rodapé
-        doc.build(story, onFirstPage=header_and_watermark, onLaterPages=footer)
+        doc.build(story, onFirstPage=header_and_footer_pdf, onLaterPages=header_and_footer_pdf)
         
         flash(f'Ingresso de {inscrito["nome_completo"]} validado com sucesso! O PDF foi gerado.')
         return redirect(url_for('admin'))
