@@ -200,14 +200,13 @@
                 radio.addEventListener('change', updateForm);
             });
 
-            // Chama updateForm no carregamento para garantir o estado inicial
             updateForm();
         });
 
         function copyPixKey() {
             const pixKeyInput = document.getElementById('pix-key');
             pixKeyInput.select();
-            pixKeyInput.setSelectionRange(0, 99999); // Para dispositivos móveis
+            pixKeyInput.setSelectionRange(0, 99999);
             navigator.clipboard.writeText(pixKeyInput.value)
                 .then(() => {
                     alert('Chave Pix copiada com sucesso!');
