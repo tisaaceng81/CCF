@@ -40,19 +40,17 @@ EVENT_LOCAL = "Real Classic Bahia - Hotel e Convenções\nOrla da Pituba - Rua F
 EVENT_DATE = "13 e 14 de Setembro"
 EVENT_TIME = "Sábado: 18h / Domingo: 08h"
 
-# Função para ler o título do evento
 def get_event_title():
     if os.path.exists(evento.config['EVENT_TITLE_FILE']):
         with open(evento.config['EVENT_TITLE_FILE'], 'r', encoding='utf-8') as f:
             return f.read().strip()
-    return "Conferência de Discipulado" # Título padrão
+    return "Conferência de Discipulado"
 
-# Nova função para ler o subtítulo do evento
 def get_event_subtitle():
     if os.path.exists(evento.config['EVENT_SUBTITLE_FILE']):
         with open(evento.config['EVENT_SUBTITLE_FILE'], 'r', encoding='utf-8') as f:
             return f.read().strip()
-    return "Discipulado e Legado - Formando a Próxima Geração" # Subtítulo padrão
+    return "Discipulado e Legado - Formando a Próxima Geração"
 
 # --- Rotas do Site ---
 
@@ -136,7 +134,6 @@ def admin():
 def header_and_footer_pdf(canvas_obj, doc):
     canvas_obj.saveState()
 
-    # Caminho da logo (agora como PNG, baseado na imagem fornecida)
     logo_path = os.path.join(evento.static_folder, 'imagens', 'logo_casa_firme.png')
     
     if os.path.exists(logo_path):
@@ -145,27 +142,24 @@ def header_and_footer_pdf(canvas_obj, doc):
         logo_height_in_points = logo_pil_image.height
         logo_img_reader = ImageReader(logo_pil_image)
 
-        # Adicionar o logo 'Casa Firme' no canto superior esquerdo (timbre)
         timbre_width = 1.5 * inch
         timbre_height = (timbre_width * logo_height_in_points) / logo_width_in_points
         canvas_obj.drawImage(logo_img_reader, 50, A4[1] - 70, width=timbre_width, height=timbre_height)
 
-        # Adicionar a marca d'água 'Casa Firme' transparente no centro
         watermark_width = 4 * inch
         watermark_height = (watermark_width * logo_height_in_points) / logo_width_in_points
         x_center = (A4[0] - watermark_width) / 2
         y_center = (A4[1] - watermark_height) / 2
         
-        canvas_obj.setFillAlpha(0.15)  # Define a transparência (15% para ser sutil)
+        canvas_obj.setFillAlpha(0.15)
         canvas_obj.drawImage(logo_img_reader, x_center, y_center, width=watermark_width, height=watermark_height, mask='auto')
-        canvas_obj.setFillAlpha(1.0)  # Volta a transparência para o padrão
+        canvas_obj.setFillAlpha(1.0)
     else:
         print(f"ATENÇÃO: A imagem da logo não foi encontrada em: {logo_path}")
 
-    # Adicionar o texto 'PAGO' no rodapé
     canvas_obj.setFont('Helvetica-Bold', 12)
-    canvas_obj.setFillColorRGB(0, 0, 0) # Cor preta para o texto do rodapé
-    canvas_obj.drawCentredString(A4[0]/2, 30, "PAGO") # Centraliza o texto no rodapé
+    canvas_obj.setFillColorRGB(0, 0, 0)
+    canvas_obj.drawCentredString(A4[0]/2, 30, "PAGO")
 
     canvas_obj.restoreState()
 
@@ -179,7 +173,6 @@ def validar_ingresso(ingresso_id):
         inscrito = inscritos[ingresso_id]
         inscrito['validado'] = True
 
-        # Geração do QR Code
         qr_code_data = f"ingresso_id:{ingresso_id}"
         qr_code_img = qrcode.make(qr_code_data)
         qr_code_filename = f"qr_{ingresso_id}.png"
@@ -187,21 +180,18 @@ def validar_ingresso(ingresso_id):
         qr_code_img.save(qr_code_path_temp)
         inscrito['qr_code_path'] = qr_code_path_temp
 
-        # Geração do PDF do Ingresso
         pdf_filename = f"ingresso_{ingresso_id}.pdf"
         pdf_path = os.path.join(evento.config['UPLOAD_FOLDER'], pdf_filename)
         
-        doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=36) # Aumentei o bottomMargin para o rodapé
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=36)
         story = []
         styles = getSampleStyleSheet()
         
-        # Título e Subtítulo do Evento
         titulo_style = ParagraphStyle(name='Titulo', parent=styles['Normal'], fontSize=20, alignment=1, spaceAfter=12)
         subtitulo_style = ParagraphStyle(name='Subtitulo', parent=styles['Normal'], fontSize=12, alignment=1, spaceAfter=24)
         story.append(Paragraph(get_event_title(), titulo_style))
         story.append(Paragraph(get_event_subtitle(), subtitulo_style))
         
-        # Informações do Ingresso
         inscrito_info = [
             ["Nome Completo:", inscrito['nome_completo']],
             ["Telefone:", inscrito['telefone']],
@@ -226,7 +216,6 @@ def validar_ingresso(ingresso_id):
         story.append(t)
         story.append(Spacer(1, 0.3*inch))
         
-        # Detalhes do Evento
         event_details = [
             ["Data:", EVENT_DATE],
             ["Horário:", EVENT_TIME],
@@ -238,18 +227,30 @@ def validar_ingresso(ingresso_id):
         story.append(details_table)
         story.append(Spacer(1, 0.3*inch))
         
-        # Adicionar QR Code
         qr_code_pdf_image = RLImage(qr_code_path_temp, width=2.5*inch, height=2.5*inch)
         story.append(qr_code_pdf_image)
         story.append(Paragraph("Apresente este QR Code na entrada do evento para validação.", styles['Italic']))
 
-        # Construir o documento aplicando as funções de cabeçalho e rodapé
         doc.build(story, onFirstPage=header_and_footer_pdf, onLaterPages=header_and_footer_pdf)
         
         flash(f'Ingresso de {inscrito["nome_completo"]} validado com sucesso! O PDF foi gerado.')
         return redirect(url_for('admin'))
     
     return "Ingresso não encontrado ou já validado.", 404
+
+@evento.route('/admin/excluir_ingresso/<ingresso_id>', methods=['POST'])
+def excluir_ingresso(ingresso_id):
+    if not is_authenticated():
+        flash("Você não tem permissão para realizar essa ação.")
+        return redirect(url_for('login'))
+    
+    if ingresso_id in inscritos:
+        del inscritos[ingresso_id]
+        flash("Inscrição excluída com sucesso.")
+    else:
+        flash("Erro: Inscrição não encontrada.")
+    
+    return redirect(url_for('admin'))
 
 @evento.route('/admin/upload_fotos', methods=['GET', 'POST'])
 def upload_fotos():
@@ -271,7 +272,6 @@ def upload_fotos():
                 flash('Fotos da galeria enviadas com sucesso!')
             elif upload_type == 'banner':
                 folder = evento.config['BANNERS_FOLDER']
-                # Apaga o banner antigo antes de salvar o novo
                 for filename in os.listdir(folder):
                     os.remove(os.path.join(folder, filename))
                 
@@ -372,7 +372,6 @@ def editar_ingresso(ingresso_id):
     ingresso_data = inscritos[ingresso_id]
 
     if request.method == 'POST':
-        # Atualiza os dados
         ingresso_data['nome_completo'] = request.form['nome_completo']
         ingresso_data['nome_secundario'] = request.form['nome_secundario']
         ingresso_data['telefone'] = request.form['telefone']
@@ -382,8 +381,6 @@ def editar_ingresso(ingresso_id):
         return redirect(url_for('admin'))
 
     return render_template('editar_ingresso.html', ingresso_id=ingresso_id, ingresso=ingresso_data)
-
-# --- Rotas para servir arquivos ---
 
 @evento.route('/qr_code/<ingresso_id>')
 def qr_code(ingresso_id):
