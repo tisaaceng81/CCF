@@ -34,6 +34,18 @@
             max-height: 50px;
             width: auto;
         }
+        .copy-button {
+            cursor: pointer;
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+        .copy-button:hover {
+            background-color: #e2e6ea;
+        }
     </style>
 </head>
 <body>
@@ -119,7 +131,7 @@
                         </div>
                         <div class="mb-3">
                             <label for="comprovante_pix" class="form-label">Envie o Comprovante do Pix</label>
-                            <input class="form-control" type="file" id="comprovante_pix" name="comprovante_pix" accept="image/*">
+                            <input class="form-control" type="file" id="comprovante_pix" name="comprovante_pix" accept="image/*" required>
                         </div>
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary btn-lg">Enviar Inscrição</button>
@@ -139,7 +151,11 @@
                 <div class="modal-body text-center">
                     <p class="mb-2">Escaneie o QR Code ou use a chave Pix abaixo para completar o pagamento.</p>
                     <img src="{{ url_for('static', filename='imagens/qr_code_pix.png') }}" alt="QR Code Pix" class="img-fluid mb-3" style="max-width: 250px;">
-                    <p class="fw-bold">Chave Pix: **SUA CHAVE PIX AQUI**</p>
+                    <p class="fw-bold">Chave Pix:</p>
+                    <div class="input-group mb-3">
+                      <input type="text" class="form-control" id="pix-key" value="59b2b661-77f6-45d8-aa30-627552ddeeaa" readonly>
+                      <button class="btn btn-outline-secondary" type="button" onclick="copyPixKey()">Copiar</button>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
@@ -183,7 +199,24 @@
             radioButtons.forEach(radio => {
                 radio.addEventListener('change', updateForm);
             });
+
+            // Chama updateForm no carregamento para garantir o estado inicial
+            updateForm();
         });
+
+        function copyPixKey() {
+            const pixKeyInput = document.getElementById('pix-key');
+            pixKeyInput.select();
+            pixKeyInput.setSelectionRange(0, 99999); // Para dispositivos móveis
+            navigator.clipboard.writeText(pixKeyInput.value)
+                .then(() => {
+                    alert('Chave Pix copiada com sucesso!');
+                })
+                .catch(err => {
+                    console.error('Erro ao copiar a chave Pix: ', err);
+                    alert('Erro ao copiar a chave Pix. Por favor, copie manualmente: ' + pixKeyInput.value);
+                });
+        }
     </script>
 </body>
 </html>
