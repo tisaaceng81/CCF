@@ -20,29 +20,30 @@ from dotenv import load_dotenv
 # NOVO: Carregar variáveis de ambiente do arquivo .env (útil para desenvolvimento local)
 load_dotenv()
 
-evento = Flask(__name__, template_folder='modelos', static_folder='estatico')
+# CORRIGIDO: Renomeado "evento" para "app" para compatibilidade com o Gunicorn no Render
+app = Flask(__name__, template_folder='modelos', static_folder='estatico')
 
-evento.secret_key = os.environ.get('SECRET_KEY', 'uma_chave_secreta_muito_segura')
-evento.config['UPLOAD_FOLDER'] = 'arquivos_enviados'
-evento.config['GALLERY_FOLDER'] = 'estatico/galeria'
-evento.config['BANNERS_FOLDER'] = 'estatico/banners'
-evento.config['EVENT_TITLE_FILE'] = 'event_title.txt'
-evento.config['EVENT_SUBTITLE_FILE'] = 'event_subtitle.txt'
+app.secret_key = os.environ.get('SECRET_KEY', 'uma_chave_secreta_muito_segura')
+app.config['UPLOAD_FOLDER'] = 'arquivos_enviados'
+app.config['GALLERY_FOLDER'] = 'estatico/galeria'
+app.config['BANNERS_FOLDER'] = 'estatico/banners'
+app.config['EVENT_TITLE_FILE'] = 'event_title.txt'
+app.config['EVENT_SUBTITLE_FILE'] = 'event_subtitle.txt'
 
-if not os.path.exists(evento.config['UPLOAD_FOLDER']):
-    os.makedirs(evento.config['UPLOAD_FOLDER'])
-if not os.path.exists(evento.config['GALLERY_FOLDER']):
-    os.makedirs(evento.config['GALLERY_FOLDER'])
-if not os.path.exists(evento.config['BANNERS_FOLDER']):
-    os.makedirs(evento.config['BANNERS_FOLDER'])
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+if not os.path.exists(app.config['GALLERY_FOLDER']):
+    os.makedirs(app.config['GALLERY_FOLDER'])
+if not os.path.exists(app.config['BANNERS_FOLDER']):
+    os.makedirs(app.config['BANNERS_FOLDER'])
 
 # NOVO: Lógica de seleção do banco de dados
 USE_DATABASE = os.environ.get('DATABASE_URL') is not None
 
 if USE_DATABASE:
-    evento.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
-    evento.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    db = SQLAlchemy(evento)
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    db = SQLAlchemy(app)
 
     # NOVO: Modelos de dados para o banco
     class Inscricao(db.Model):
@@ -67,7 +68,7 @@ if USE_DATABASE:
 
     # NOVO: Função para inicializar o banco de dados
     def inicializar_banco():
-        with evento.app_context():
+        with app.app_context():
             db.create_all()
             if not Admin.query.filter_by(username='Leandro').first():
                 admin_user = Admin(username='Leandro', password='123456')
@@ -94,8 +95,8 @@ def get_event_title():
         info = EventoInfo.query.first()
         return info.titulo if info else "Conferência de Discipulado"
     else:
-        if os.path.exists(evento.config['EVENT_TITLE_FILE']):
-            with open(evento.config['EVENT_TITLE_FILE'], 'r', encoding='utf-8') as f:
+        if os.path.exists(app.config['EVENT_TITLE_FILE']):
+            with open(app.config['EVENT_TITLE_FILE'], 'r', encoding='utf-8') as f:
                 return f.read().strip()
         return "Conferência de Discipulado"
 
@@ -104,24 +105,24 @@ def get_event_subtitle():
         info = EventoInfo.query.first()
         return info.subtitulo if info else "Discipulado e Legado - Formando a Próxima Geração"
     else:
-        if os.path.exists(evento.config['EVENT_SUBTITLE_FILE']):
-            with open(evento.config['EVENT_SUBTITLE_FILE'], 'r', encoding='utf-8') as f:
+        if os.path.exists(app.config['EVENT_SUBTITLE_FILE']):
+            with open(app.config['EVENT_SUBTITLE_FILE'], 'r', encoding='utf-8') as f:
                 return f.read().strip()
         return "Discipulado e Legado - Formando a Próxima Geração"
 
 # --- Rotas do Site ---
 
-@evento.route('/')
+@app.route('/')
 def pagina_inicial():
-    gallery_photos = os.listdir(evento.config['GALLERY_FOLDER'])
-    banners = os.listdir(evento.config['BANNERS_FOLDER'])
+    gallery_photos = os.listdir(app.config['GALLERY_FOLDER'])
+    banners = os.listdir(app.config['BANNERS_FOLDER'])
     banners.sort()
     latest_banner = banners[-1] if banners else None
     event_title = get_event_title()
     event_subtitle = get_event_subtitle()
     return render_template('pagina_inicial.html', gallery_photos=gallery_photos, latest_banner=latest_banner, event_title=event_title, event_subtitle=event_subtitle)
 
-@evento.route('/registrar', methods=['POST'])
+@app.route('/registrar', methods=['POST'])
 def registrar():
     nome_principal = request.form['nome']
     nome_secundario = request.form.get('nome_secundario', '')
@@ -136,7 +137,7 @@ def registrar():
 
     ingresso_id = str(uuid.uuid4())
     comprovante_filename = f"{ingresso_id}_{comprovante.filename}"
-    comprovante_path = os.path.join(evento.config['UPLOAD_FOLDER'], comprovante_filename)
+    comprovante_path = os.path.join(app.config['UPLOAD_FOLDER'], comprovante_filename)
     comprovante.save(comprovante_path)
 
     if USE_DATABASE:
@@ -168,7 +169,7 @@ def registrar():
 
 # --- Rotas de Autenticação e Admin ---
 
-@evento.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
@@ -191,7 +192,7 @@ def login():
                 flash('Usuário ou senha inválidos.')
     return render_template('login.html')
 
-@evento.route('/logout')
+@app.route('/logout')
 def logout():
     session.pop('logged_in', None)
     return redirect(url_for('pagina_inicial'))
@@ -199,7 +200,7 @@ def logout():
 def is_authenticated():
     return session.get('logged_in')
 
-@evento.route('/admin')
+@app.route('/admin')
 def admin():
     if not is_authenticated():
         return redirect(url_for('login'))
@@ -224,7 +225,7 @@ def admin():
 def header_and_footer_pdf(canvas_obj, doc):
     canvas_obj.saveState()
 
-    logo_path = os.path.join(evento.static_folder, 'imagens', 'logo_casa_firme.png')
+    logo_path = os.path.join(app.static_folder, 'imagens', 'logo_casa_firme.png')
     
     if os.path.exists(logo_path):
         logo_pil_image = Image.open(logo_path)
@@ -254,7 +255,7 @@ def header_and_footer_pdf(canvas_obj, doc):
     canvas_obj.restoreState()
 
 
-@evento.route('/validar_ingresso/<ingresso_id>')
+@app.route('/validar_ingresso/<ingresso_id>')
 def validar_ingresso(ingresso_id):
     if not is_authenticated():
         return redirect(url_for('login'))
@@ -267,10 +268,10 @@ def validar_ingresso(ingresso_id):
             
             qr_code_data = f"ingresso_id:{ingresso_id}"
             qr_code_img = qrcode.make(qr_code_data)
-            qr_code_path_temp = os.path.join(evento.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
+            qr_code_path_temp = os.path.join(app.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
             qr_code_img.save(qr_code_path_temp)
 
-            pdf_path = os.path.join(evento.config['UPLOAD_FOLDER'], f"ingresso_{ingresso_id}.pdf")
+            pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], f"ingresso_{ingresso_id}.pdf")
             doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=36)
             story = []
             styles = getSampleStyleSheet()
@@ -330,12 +331,12 @@ def validar_ingresso(ingresso_id):
 
             qr_code_data = f"ingresso_id:{ingresso_id}"
             qr_code_img = qrcode.make(qr_code_data)
-            qr_code_path_temp = os.path.join(evento.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
+            qr_code_path_temp = os.path.join(app.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
             qr_code_img.save(qr_code_path_temp)
             inscrito['qr_code_path'] = qr_code_path_temp
 
             pdf_filename = f"ingresso_{ingresso_id}.pdf"
-            pdf_path = os.path.join(evento.config['UPLOAD_FOLDER'], pdf_filename)
+            pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_filename)
             
             doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=36)
             story = []
@@ -394,7 +395,7 @@ def validar_ingresso(ingresso_id):
 
 # --- Rotas de Admin (Continuação) ---
 
-@evento.route('/admin/excluir_ingresso/<ingresso_id>', methods=['POST'])
+@app.route('/admin/excluir_ingresso/<ingresso_id>', methods=['POST'])
 def excluir_ingresso(ingresso_id):
     if not is_authenticated():
         flash("Você não tem permissão para realizar essa ação.")
@@ -417,7 +418,7 @@ def excluir_ingresso(ingresso_id):
     
     return redirect(url_for('admin'))
 
-@evento.route('/admin/upload_fotos', methods=['GET', 'POST'])
+@app.route('/admin/upload_fotos', methods=['GET', 'POST'])
 def upload_fotos():
     if not is_authenticated():
         return redirect(url_for('login'))
@@ -428,7 +429,7 @@ def upload_fotos():
             upload_type = request.form['upload_type']
             
             if upload_type == 'galeria':
-                folder = evento.config['GALLERY_FOLDER']
+                folder = app.config['GALLERY_FOLDER']
                 for photo in photos_to_upload:
                     if photo and photo.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
                         photo_filename = str(uuid.uuid4()) + os.path.splitext(photo.filename)[1]
@@ -436,7 +437,7 @@ def upload_fotos():
                         photo.save(photo_path)
                 flash('Fotos da galeria enviadas com sucesso!')
             elif upload_type == 'banner':
-                folder = evento.config['BANNERS_FOLDER']
+                folder = app.config['BANNERS_FOLDER']
                 for filename in os.listdir(folder):
                     os.remove(os.path.join(folder, filename))
                 
@@ -449,17 +450,17 @@ def upload_fotos():
             
             return redirect(url_for('upload_fotos'))
 
-    gallery_photos = os.listdir(evento.config['GALLERY_FOLDER'])
-    banners = os.listdir(evento.config['BANNERS_FOLDER'])
+    gallery_photos = os.listdir(app.config['GALLERY_FOLDER'])
+    banners = os.listdir(app.config['BANNERS_FOLDER'])
     latest_banner = banners[-1] if banners else None
     return render_template('upload_fotos.html', gallery_photos=gallery_photos, latest_banner=latest_banner)
 
-@evento.route('/admin/excluir_foto/<filename>', methods=['POST'])
+@app.route('/admin/excluir_foto/<filename>', methods=['POST'])
 def excluir_foto(filename):
     if not is_authenticated():
         return redirect(url_for('login'))
     
-    file_path = os.path.join(evento.config['GALLERY_FOLDER'], filename)
+    file_path = os.path.join(app.config['GALLERY_FOLDER'], filename)
     
     if os.path.exists(file_path):
         os.remove(file_path)
@@ -469,12 +470,12 @@ def excluir_foto(filename):
         
     return redirect(url_for('upload_fotos'))
 
-@evento.route('/admin/excluir_banner', methods=['POST'])
+@app.route('/admin/excluir_banner', methods=['POST'])
 def excluir_banner():
     if not is_authenticated():
         return redirect(url_for('login'))
     
-    banner_folder = evento.config['BANNERS_FOLDER']
+    banner_folder = app.config['BANNERS_FOLDER']
     banners = os.listdir(banner_folder)
     
     if banners:
@@ -487,7 +488,7 @@ def excluir_banner():
         
     return redirect(url_for('upload_fotos'))
 
-@evento.route('/admin/alterar_senha', methods=['GET', 'POST'])
+@app.route('/admin/alterar_senha', methods=['GET', 'POST'])
 def alterar_senha():
     if not is_authenticated():
         return redirect(url_for('login'))
@@ -512,7 +513,7 @@ def alterar_senha():
                 flash('Senha antiga incorreta.')
     return render_template('alterar_senha.html')
 
-@evento.route('/admin/alterar_titulo_evento', methods=['POST'])
+@app.route('/admin/alterar_titulo_evento', methods=['POST'])
 def alterar_titulo_evento():
     if not is_authenticated():
         return redirect(url_for('login'))
@@ -531,13 +532,13 @@ def alterar_titulo_evento():
             flash('Erro: Informações do evento não encontradas no banco.', 'error')
     else:
         if novo_titulo:
-            with open(evento.config['EVENT_TITLE_FILE'], 'w', encoding='utf-8') as f:
+            with open(app.config['EVENT_TITLE_FILE'], 'w', encoding='utf-8') as f:
                 f.write(novo_titulo)
         else:
             flash('O título não pode estar vazio.', 'error')
         
         if novo_subtitulo:
-            with open(evento.config['EVENT_SUBTITLE_FILE'], 'w', encoding='utf-8') as f:
+            with open(app.config['EVENT_SUBTITLE_FILE'], 'w', encoding='utf-8') as f:
                 f.write(novo_subtitulo)
             flash('Título e subtítulo do evento atualizados com sucesso!')
         else:
@@ -545,7 +546,7 @@ def alterar_titulo_evento():
     
     return redirect(url_for('admin'))
 
-@evento.route('/admin/editar_ingresso/<ingresso_id>', methods=['GET', 'POST'])
+@app.route('/admin/editar_ingresso/<ingresso_id>', methods=['GET', 'POST'])
 def editar_ingresso(ingresso_id):
     if not is_authenticated():
         return redirect(url_for('login'))
@@ -580,30 +581,29 @@ def editar_ingresso(ingresso_id):
 
     return render_template('editar_ingresso.html', ingresso_id=ingresso_id, ingresso=ingresso_data)
 
-@evento.route('/qr_code/<ingresso_id>')
+@app.route('/qr_code/<ingresso_id>')
 def qr_code(ingresso_id):
     if USE_DATABASE:
         inscrito = Inscricao.query.get(ingresso_id)
         if inscrito and inscrito.validado:
-            qr_code_path = os.path.join(evento.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
-            return send_from_directory(evento.config['UPLOAD_FOLDER'], os.path.basename(qr_code_path))
+            qr_code_path = os.path.join(app.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
+            return send_from_directory(app.config['UPLOAD_FOLDER'], os.path.basename(qr_code_path))
     else:
         if ingresso_id in inscritos and inscritos[ingresso_id]['validado']:
             qr_code_path = inscritos[ingresso_id]['qr_code_path']
-            return send_from_directory(evento.config['UPLOAD_FOLDER'], os.path.basename(qr_code_path))
+            return send_from_directory(app.config['UPLOAD_FOLDER'], os.path.basename(qr_code_path))
     
     return "Ingresso não validado ou não encontrado.", 404
 
-@evento.route('/comprovante/<filename>')
+@app.route('/comprovante/<filename>')
 def comprovante(filename):
-    return send_from_directory(evento.config['UPLOAD_FOLDER'], filename)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-@evento.route('/ingresso/<filename>')
+@app.route('/ingresso/<filename>')
 def ingresso_pdf(filename):
-    return send_from_directory(evento.config['UPLOAD_FOLDER'], filename)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
-    # NOVO: Se o banco de dados for usado, inicialize-o
     if USE_DATABASE:
         inicializar_banco()
-    evento.run(debug=True, host='0.0.0.0')
+    app.run(debug=True, host='0.0.0.0')
