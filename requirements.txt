@@ -1,0 +1,7 @@
+Flask
+gunicorn
+qrcode
+Pillow
+reportlab
+Flask-SQLAlchemy
+python-dotenv
