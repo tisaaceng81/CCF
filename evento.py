@@ -90,6 +90,7 @@ EVENT_LOCAL = "Real Classic Bahia - Hotel e Convenções\nOrla da Pituba - Rua F
 EVENT_DATE = "13 e 14 de Setembro"
 EVENT_TIME = "Sábado: 18h / Domingo: 08h"
 
+# CORRIGIDO: Adicionado a verificação para o caso onde o banco está vazio
 def get_event_title():
     if USE_DATABASE:
         info = EventoInfo.query.first()
@@ -100,6 +101,7 @@ def get_event_title():
                 return f.read().strip()
         return "Conferência de Discipulado"
 
+# CORRIGIDO: Adicionado a verificação para o caso onde o banco está vazio
 def get_event_subtitle():
     if USE_DATABASE:
         info = EventoInfo.query.first()
