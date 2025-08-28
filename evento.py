@@ -12,9 +12,17 @@ from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
+# NOVO: Importações para SQLAlchemy
+from flask_sqlalchemy import SQLAlchemy
+# NOVO: Importação para variáveis de ambiente
+from dotenv import load_dotenv
+
+# NOVO: Carregar variáveis de ambiente do arquivo .env (útil para desenvolvimento local)
+load_dotenv()
+
 evento = Flask(__name__, template_folder='modelos', static_folder='estatico')
 
-evento.secret_key = 'uma_chave_secreta_muito_segura'
+evento.secret_key = os.environ.get('SECRET_KEY', 'uma_chave_secreta_muito_segura')
 evento.config['UPLOAD_FOLDER'] = 'arquivos_enviados'
 evento.config['GALLERY_FOLDER'] = 'estatico/galeria'
 evento.config['BANNERS_FOLDER'] = 'estatico/banners'
@@ -28,12 +36,53 @@ if not os.path.exists(evento.config['GALLERY_FOLDER']):
 if not os.path.exists(evento.config['BANNERS_FOLDER']):
     os.makedirs(evento.config['BANNERS_FOLDER'])
 
-ADMIN_CREDENTIALS = {
-    'username': 'Leandro',
-    'password': '123456'
-}
+# NOVO: Lógica de seleção do banco de dados
+USE_DATABASE = os.environ.get('DATABASE_URL') is not None
 
-inscritos = {}
+if USE_DATABASE:
+    evento.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    evento.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    db = SQLAlchemy(evento)
+
+    # NOVO: Modelos de dados para o banco
+    class Inscricao(db.Model):
+        id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+        nome_completo = db.Column(db.String(100), nullable=False)
+        nome_secundario = db.Column(db.String(100), nullable=True)
+        telefone = db.Column(db.String(20), nullable=False)
+        email = db.Column(db.String(100), nullable=False)
+        tipo_ingresso = db.Column(db.String(20), nullable=False)
+        comprovante_pix = db.Column(db.String(100), nullable=False)
+        validado = db.Column(db.Boolean, default=False)
+
+    class Admin(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        username = db.Column(db.String(50), unique=True, nullable=False)
+        password = db.Column(db.String(100), nullable=False)
+
+    class EventoInfo(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        titulo = db.Column(db.String(255), nullable=False)
+        subtitulo = db.Column(db.String(255), nullable=False)
+
+    # NOVO: Função para inicializar o banco de dados
+    def inicializar_banco():
+        with evento.app_context():
+            db.create_all()
+            if not Admin.query.filter_by(username='Leandro').first():
+                admin_user = Admin(username='Leandro', password='123456')
+                db.session.add(admin_user)
+            if not EventoInfo.query.first():
+                evento_info = EventoInfo(titulo="Conferência de Discipulado", subtitulo="Discipulado e Legado - Formando a Próxima Geração")
+                db.session.add(evento_info)
+            db.session.commit()
+else:
+    # A lógica original do dicionário permanece
+    ADMIN_CREDENTIALS = {
+        'username': 'Leandro',
+        'password': '123456'
+    }
+    inscritos = {}
 
 # Dados do evento extraídos das imagens fornecidas
 EVENT_LOCAL = "Real Classic Bahia - Hotel e Convenções\nOrla da Pituba - Rua Fernando Menezes de Góes, 165 - Salvador"
@@ -41,16 +90,24 @@ EVENT_DATE = "13 e 14 de Setembro"
 EVENT_TIME = "Sábado: 18h / Domingo: 08h"
 
 def get_event_title():
-    if os.path.exists(evento.config['EVENT_TITLE_FILE']):
-        with open(evento.config['EVENT_TITLE_FILE'], 'r', encoding='utf-8') as f:
-            return f.read().strip()
-    return "Conferência de Discipulado"
+    if USE_DATABASE:
+        info = EventoInfo.query.first()
+        return info.titulo if info else "Conferência de Discipulado"
+    else:
+        if os.path.exists(evento.config['EVENT_TITLE_FILE']):
+            with open(evento.config['EVENT_TITLE_FILE'], 'r', encoding='utf-8') as f:
+                return f.read().strip()
+        return "Conferência de Discipulado"
 
 def get_event_subtitle():
-    if os.path.exists(evento.config['EVENT_SUBTITLE_FILE']):
-        with open(evento.config['EVENT_SUBTITLE_FILE'], 'r', encoding='utf-8') as f:
-            return f.read().strip()
-    return "Discipulado e Legado - Formando a Próxima Geração"
+    if USE_DATABASE:
+        info = EventoInfo.query.first()
+        return info.subtitulo if info else "Discipulado e Legado - Formando a Próxima Geração"
+    else:
+        if os.path.exists(evento.config['EVENT_SUBTITLE_FILE']):
+            with open(evento.config['EVENT_SUBTITLE_FILE'], 'r', encoding='utf-8') as f:
+                return f.read().strip()
+        return "Discipulado e Legado - Formando a Próxima Geração"
 
 # --- Rotas do Site ---
 
@@ -78,21 +135,33 @@ def registrar():
         return redirect(url_for('pagina_inicial'))
 
     ingresso_id = str(uuid.uuid4())
-
     comprovante_filename = f"{ingresso_id}_{comprovante.filename}"
     comprovante_path = os.path.join(evento.config['UPLOAD_FOLDER'], comprovante_filename)
     comprovante.save(comprovante_path)
 
-    inscritos[ingresso_id] = {
-        'nome_completo': nome_principal,
-        'nome_secundario': nome_secundario,
-        'telefone': telefone,
-        'email': email,
-        'tipo_ingresso': tipo_ingresso,
-        'comprovante_pix': comprovante_filename,
-        'validado': False,
-        'qr_code_path': None
-    }
+    if USE_DATABASE:
+        novo_inscrito = Inscricao(
+            id=ingresso_id,
+            nome_completo=nome_principal,
+            nome_secundario=nome_secundario,
+            telefone=telefone,
+            email=email,
+            tipo_ingresso=tipo_ingresso,
+            comprovante_pix=comprovante_filename
+        )
+        db.session.add(novo_inscrito)
+        db.session.commit()
+    else:
+        inscritos[ingresso_id] = {
+            'nome_completo': nome_principal,
+            'nome_secundario': nome_secundario,
+            'telefone': telefone,
+            'email': email,
+            'tipo_ingresso': tipo_ingresso,
+            'comprovante_pix': comprovante_filename,
+            'validado': False,
+            'qr_code_path': None
+        }
     
     flash('Seu registro foi enviado! Aguarde a validação do seu pagamento.')
     return redirect(url_for('pagina_inicial'))
@@ -104,12 +173,22 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        if username == ADMIN_CREDENTIALS['username'] and password == ADMIN_CREDENTIALS['password']:
-            session['logged_in'] = True
-            flash('Login realizado com sucesso!')
-            return redirect(url_for('admin'))
+        
+        if USE_DATABASE:
+            admin_user = Admin.query.filter_by(username=username, password=password).first()
+            if admin_user:
+                session['logged_in'] = True
+                flash('Login realizado com sucesso!')
+                return redirect(url_for('admin'))
+            else:
+                flash('Usuário ou senha inválidos.')
         else:
-            flash('Usuário ou senha inválidos.')
+            if username == ADMIN_CREDENTIALS['username'] and password == ADMIN_CREDENTIALS['password']:
+                session['logged_in'] = True
+                flash('Login realizado com sucesso!')
+                return redirect(url_for('admin'))
+            else:
+                flash('Usuário ou senha inválidos.')
     return render_template('login.html')
 
 @evento.route('/logout')
@@ -124,12 +203,23 @@ def is_authenticated():
 def admin():
     if not is_authenticated():
         return redirect(url_for('login'))
+        
     event_title = get_event_title()
     event_subtitle = get_event_subtitle()
-    inscritos_count = len(inscritos)
-    return render_template('admin.html', inscritos=inscritos, event_title=event_title, event_subtitle=event_subtitle, inscritos_count=inscritos_count)
+
+    if USE_DATABASE:
+        inscritos_list = Inscricao.query.all()
+        inscritos_dict = {i.id: i for i in inscritos_list}
+        inscritos_count = len(inscritos_list)
+    else:
+        inscritos_dict = inscritos
+        inscritos_count = len(inscritos)
+
+    return render_template('admin.html', inscritos=inscritos_dict, event_title=event_title, event_subtitle=event_subtitle, inscritos_count=inscritos_count)
+
 
 # --- Funções de Cabeçalho e Rodapé para o PDF ---
+# (Essa parte permanece a mesma)
 
 def header_and_footer_pdf(canvas_obj, doc):
     canvas_obj.saveState()
@@ -169,74 +259,140 @@ def validar_ingresso(ingresso_id):
     if not is_authenticated():
         return redirect(url_for('login'))
     
-    if ingresso_id in inscritos and not inscritos[ingresso_id]['validado']:
-        inscrito = inscritos[ingresso_id]
-        inscrito['validado'] = True
+    if USE_DATABASE:
+        inscrito = Inscricao.query.get(ingresso_id)
+        if inscrito and not inscrito.validado:
+            inscrito.validado = True
+            db.session.commit()
+            
+            qr_code_data = f"ingresso_id:{ingresso_id}"
+            qr_code_img = qrcode.make(qr_code_data)
+            qr_code_path_temp = os.path.join(evento.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
+            qr_code_img.save(qr_code_path_temp)
 
-        qr_code_data = f"ingresso_id:{ingresso_id}"
-        qr_code_img = qrcode.make(qr_code_data)
-        qr_code_filename = f"qr_{ingresso_id}.png"
-        qr_code_path_temp = os.path.join(evento.config['UPLOAD_FOLDER'], qr_code_filename)
-        qr_code_img.save(qr_code_path_temp)
-        inscrito['qr_code_path'] = qr_code_path_temp
+            pdf_path = os.path.join(evento.config['UPLOAD_FOLDER'], f"ingresso_{ingresso_id}.pdf")
+            doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=36)
+            story = []
+            styles = getSampleStyleSheet()
+            
+            titulo_style = ParagraphStyle(name='Titulo', parent=styles['Normal'], fontSize=20, alignment=1, spaceAfter=12)
+            subtitulo_style = ParagraphStyle(name='Subtitulo', parent=styles['Normal'], fontSize=12, alignment=1, spaceAfter=24)
+            story.append(Paragraph(get_event_title(), titulo_style))
+            story.append(Paragraph(get_event_subtitle(), subtitulo_style))
+            
+            inscrito_info = [
+                ["Nome Completo:", inscrito.nome_completo],
+                ["Telefone:", inscrito.telefone],
+                ["Email:", inscrito.email],
+                ["Tipo de Ingresso:", inscrito.tipo_ingresso],
+                ["", ""]
+            ]
+            
+            if inscrito.nome_secundario:
+                inscrito_info.insert(1, ["Nome Secundário:", inscrito.nome_secundario])
 
-        pdf_filename = f"ingresso_{ingresso_id}.pdf"
-        pdf_path = os.path.join(evento.config['UPLOAD_FOLDER'], pdf_filename)
-        
-        doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=36)
-        story = []
-        styles = getSampleStyleSheet()
-        
-        titulo_style = ParagraphStyle(name='Titulo', parent=styles['Normal'], fontSize=20, alignment=1, spaceAfter=12)
-        subtitulo_style = ParagraphStyle(name='Subtitulo', parent=styles['Normal'], fontSize=12, alignment=1, spaceAfter=24)
-        story.append(Paragraph(get_event_title(), titulo_style))
-        story.append(Paragraph(get_event_subtitle(), subtitulo_style))
-        
-        inscrito_info = [
-            ["Nome Completo:", inscrito['nome_completo']],
-            ["Telefone:", inscrito['telefone']],
-            ["Email:", inscrito['email']],
-            ["Tipo de Ingresso:", inscrito['tipo_ingresso']],
-            ["", ""]
-        ]
-        
-        if inscrito['nome_secundario']:
-            inscrito_info.insert(1, ["Nome Secundário:", inscrito['nome_secundario']])
+            table_style = TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LINEBELOW', (0, 0), (-1, -1), 1, colors.black),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ])
 
-        table_style = TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LINEBELOW', (0, 0), (-1, -1), 1, colors.black),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ])
+            t = Table(inscrito_info, colWidths=[2.5*inch, 4*inch])
+            t.setStyle(table_style)
+            story.append(t)
+            story.append(Spacer(1, 0.3*inch))
+            
+            event_details = [
+                ["Data:", EVENT_DATE],
+                ["Horário:", EVENT_TIME],
+                ["Local:", EVENT_LOCAL]
+            ]
+            
+            details_table = Table(event_details, colWidths=[2.5*inch, 4*inch])
+            details_table.setStyle(table_style)
+            story.append(details_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            qr_code_pdf_image = RLImage(qr_code_path_temp, width=2.5*inch, height=2.5*inch)
+            story.append(qr_code_pdf_image)
+            story.append(Paragraph("Apresente este QR Code na entrada do evento para validação.", styles['Italic']))
 
-        t = Table(inscrito_info, colWidths=[2.5*inch, 4*inch])
-        t.setStyle(table_style)
-        story.append(t)
-        story.append(Spacer(1, 0.3*inch))
-        
-        event_details = [
-            ["Data:", EVENT_DATE],
-            ["Horário:", EVENT_TIME],
-            ["Local:", EVENT_LOCAL]
-        ]
-        
-        details_table = Table(event_details, colWidths=[2.5*inch, 4*inch])
-        details_table.setStyle(table_style)
-        story.append(details_table)
-        story.append(Spacer(1, 0.3*inch))
-        
-        qr_code_pdf_image = RLImage(qr_code_path_temp, width=2.5*inch, height=2.5*inch)
-        story.append(qr_code_pdf_image)
-        story.append(Paragraph("Apresente este QR Code na entrada do evento para validação.", styles['Italic']))
+            doc.build(story, onFirstPage=header_and_footer_pdf, onLaterPages=header_and_footer_pdf)
+            
+            flash(f'Ingresso de {inscrito.nome_completo} validado com sucesso! O PDF foi gerado.')
+            return redirect(url_for('admin'))
+    else:
+        if ingresso_id in inscritos and not inscritos[ingresso_id]['validado']:
+            inscrito = inscritos[ingresso_id]
+            inscrito['validado'] = True
 
-        doc.build(story, onFirstPage=header_and_footer_pdf, onLaterPages=header_and_footer_pdf)
-        
-        flash(f'Ingresso de {inscrito["nome_completo"]} validado com sucesso! O PDF foi gerado.')
-        return redirect(url_for('admin'))
+            qr_code_data = f"ingresso_id:{ingresso_id}"
+            qr_code_img = qrcode.make(qr_code_data)
+            qr_code_path_temp = os.path.join(evento.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
+            qr_code_img.save(qr_code_path_temp)
+            inscrito['qr_code_path'] = qr_code_path_temp
+
+            pdf_filename = f"ingresso_{ingresso_id}.pdf"
+            pdf_path = os.path.join(evento.config['UPLOAD_FOLDER'], pdf_filename)
+            
+            doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=36)
+            story = []
+            styles = getSampleStyleSheet()
+            
+            titulo_style = ParagraphStyle(name='Titulo', parent=styles['Normal'], fontSize=20, alignment=1, spaceAfter=12)
+            subtitulo_style = ParagraphStyle(name='Subtitulo', parent=styles['Normal'], fontSize=12, alignment=1, spaceAfter=24)
+            story.append(Paragraph(get_event_title(), titulo_style))
+            story.append(Paragraph(get_event_subtitle(), subtitulo_style))
+            
+            inscrito_info = [
+                ["Nome Completo:", inscrito['nome_completo']],
+                ["Telefone:", inscrito['telefone']],
+                ["Email:", inscrito['email']],
+                ["Tipo de Ingresso:", inscrito['tipo_ingresso']],
+                ["", ""]
+            ]
+            
+            if inscrito['nome_secundario']:
+                inscrito_info.insert(1, ["Nome Secundário:", inscrito['nome_secundario']])
+
+            table_style = TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LINEBELOW', (0, 0), (-1, -1), 1, colors.black),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ])
+
+            t = Table(inscrito_info, colWidths=[2.5*inch, 4*inch])
+            t.setStyle(table_style)
+            story.append(t)
+            story.append(Spacer(1, 0.3*inch))
+            
+            event_details = [
+                ["Data:", EVENT_DATE],
+                ["Horário:", EVENT_TIME],
+                ["Local:", EVENT_LOCAL]
+            ]
+            
+            details_table = Table(event_details, colWidths=[2.5*inch, 4*inch])
+            details_table.setStyle(table_style)
+            story.append(details_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            qr_code_pdf_image = RLImage(qr_code_path_temp, width=2.5*inch, height=2.5*inch)
+            story.append(qr_code_pdf_image)
+            story.append(Paragraph("Apresente este QR Code na entrada do evento para validação.", styles['Italic']))
+
+            doc.build(story, onFirstPage=header_and_footer_pdf, onLaterPages=header_and_footer_pdf)
+
+            flash(f'Ingresso de {inscrito["nome_completo"]} validado com sucesso! O PDF foi gerado.')
+            return redirect(url_for('admin'))
     
     return "Ingresso não encontrado ou já validado.", 404
+
+# --- Rotas de Admin (Continuação) ---
 
 @evento.route('/admin/excluir_ingresso/<ingresso_id>', methods=['POST'])
 def excluir_ingresso(ingresso_id):
@@ -244,11 +400,20 @@ def excluir_ingresso(ingresso_id):
         flash("Você não tem permissão para realizar essa ação.")
         return redirect(url_for('login'))
     
-    if ingresso_id in inscritos:
-        del inscritos[ingresso_id]
-        flash("Inscrição excluída com sucesso.")
+    if USE_DATABASE:
+        inscrito = Inscricao.query.get(ingresso_id)
+        if inscrito:
+            db.session.delete(inscrito)
+            db.session.commit()
+            flash("Inscrição excluída com sucesso.")
+        else:
+            flash("Erro: Inscrição não encontrada.")
     else:
-        flash("Erro: Inscrição não encontrada.")
+        if ingresso_id in inscritos:
+            del inscritos[ingresso_id]
+            flash("Inscrição excluída com sucesso.")
+        else:
+            flash("Erro: Inscrição não encontrada.")
     
     return redirect(url_for('admin'))
 
@@ -330,11 +495,21 @@ def alterar_senha():
     if request.method == 'POST':
         old_password = request.form['senha_antiga']
         new_password = request.form['nova_senha']
-        if old_password == ADMIN_CREDENTIALS['password']:
-            ADMIN_CREDENTIALS['password'] = new_password
-            flash('Senha alterada com sucesso!')
+        
+        if USE_DATABASE:
+            admin_user = Admin.query.filter_by(username='Leandro').first()
+            if admin_user and admin_user.password == old_password:
+                admin_user.password = new_password
+                db.session.commit()
+                flash('Senha alterada com sucesso!')
+            else:
+                flash('Senha antiga incorreta.')
         else:
-            flash('Senha antiga incorreta.')
+            if old_password == ADMIN_CREDENTIALS['password']:
+                ADMIN_CREDENTIALS['password'] = new_password
+                flash('Senha alterada com sucesso!')
+            else:
+                flash('Senha antiga incorreta.')
     return render_template('alterar_senha.html')
 
 @evento.route('/admin/alterar_titulo_evento', methods=['POST'])
@@ -344,19 +519,29 @@ def alterar_titulo_evento():
     
     novo_titulo = request.form['novo_titulo']
     novo_subtitulo = request.form['novo_subtitulo']
-    
-    if novo_titulo:
-        with open(evento.config['EVENT_TITLE_FILE'], 'w', encoding='utf-8') as f:
-            f.write(novo_titulo)
+
+    if USE_DATABASE:
+        evento_info = EventoInfo.query.first()
+        if evento_info:
+            evento_info.titulo = novo_titulo
+            evento_info.subtitulo = novo_subtitulo
+            db.session.commit()
+            flash('Título e subtítulo do evento atualizados com sucesso!')
+        else:
+            flash('Erro: Informações do evento não encontradas no banco.', 'error')
     else:
-        flash('O título não pode estar vazio.', 'error')
-    
-    if novo_subtitulo:
-        with open(evento.config['EVENT_SUBTITLE_FILE'], 'w', encoding='utf-8') as f:
-            f.write(novo_subtitulo)
-        flash('Título e subtítulo do evento atualizados com sucesso!')
-    else:
-        flash('O subtítulo não pode estar vazio.', 'error')
+        if novo_titulo:
+            with open(evento.config['EVENT_TITLE_FILE'], 'w', encoding='utf-8') as f:
+                f.write(novo_titulo)
+        else:
+            flash('O título não pode estar vazio.', 'error')
+        
+        if novo_subtitulo:
+            with open(evento.config['EVENT_SUBTITLE_FILE'], 'w', encoding='utf-8') as f:
+                f.write(novo_subtitulo)
+            flash('Título e subtítulo do evento atualizados com sucesso!')
+        else:
+            flash('O subtítulo não pode estar vazio.', 'error')
     
     return redirect(url_for('admin'))
 
@@ -364,19 +549,32 @@ def alterar_titulo_evento():
 def editar_ingresso(ingresso_id):
     if not is_authenticated():
         return redirect(url_for('login'))
-
-    if ingresso_id not in inscritos:
-        flash("Inscrição não encontrada.")
-        return redirect(url_for('admin'))
-
-    ingresso_data = inscritos[ingresso_id]
+    
+    if USE_DATABASE:
+        ingresso_data = Inscricao.query.get(ingresso_id)
+        if not ingresso_data:
+            flash("Inscrição não encontrada.")
+            return redirect(url_for('admin'))
+    else:
+        if ingresso_id not in inscritos:
+            flash("Inscrição não encontrada.")
+            return redirect(url_for('admin'))
+        ingresso_data = inscritos[ingresso_id]
 
     if request.method == 'POST':
-        ingresso_data['nome_completo'] = request.form['nome_completo']
-        ingresso_data['nome_secundario'] = request.form['nome_secundario']
-        ingresso_data['telefone'] = request.form['telefone']
-        ingresso_data['email'] = request.form['email']
-        ingresso_data['tipo_ingresso'] = request.form['tipo_ingresso']
+        if USE_DATABASE:
+            ingresso_data.nome_completo = request.form['nome_completo']
+            ingresso_data.nome_secundario = request.form['nome_secundario']
+            ingresso_data.telefone = request.form['telefone']
+            ingresso_data.email = request.form['email']
+            ingresso_data.tipo_ingresso = request.form['tipo_ingresso']
+            db.session.commit()
+        else:
+            ingresso_data['nome_completo'] = request.form['nome_completo']
+            ingresso_data['nome_secundario'] = request.form['nome_secundario']
+            ingresso_data['telefone'] = request.form['telefone']
+            ingresso_data['email'] = request.form['email']
+            ingresso_data['tipo_ingresso'] = request.form['tipo_ingresso']
         flash("Inscrição atualizada com sucesso!")
         return redirect(url_for('admin'))
 
@@ -384,9 +582,16 @@ def editar_ingresso(ingresso_id):
 
 @evento.route('/qr_code/<ingresso_id>')
 def qr_code(ingresso_id):
-    if ingresso_id in inscritos and inscritos[ingresso_id]['validado']:
-        qr_code_path = inscritos[ingresso_id]['qr_code_path']
-        return send_from_directory(evento.config['UPLOAD_FOLDER'], os.path.basename(qr_code_path))
+    if USE_DATABASE:
+        inscrito = Inscricao.query.get(ingresso_id)
+        if inscrito and inscrito.validado:
+            qr_code_path = os.path.join(evento.config['UPLOAD_FOLDER'], f"qr_{ingresso_id}.png")
+            return send_from_directory(evento.config['UPLOAD_FOLDER'], os.path.basename(qr_code_path))
+    else:
+        if ingresso_id in inscritos and inscritos[ingresso_id]['validado']:
+            qr_code_path = inscritos[ingresso_id]['qr_code_path']
+            return send_from_directory(evento.config['UPLOAD_FOLDER'], os.path.basename(qr_code_path))
+    
     return "Ingresso não validado ou não encontrado.", 404
 
 @evento.route('/comprovante/<filename>')
@@ -398,4 +603,7 @@ def ingresso_pdf(filename):
     return send_from_directory(evento.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
+    # NOVO: Se o banco de dados for usado, inicialize-o
+    if USE_DATABASE:
+        inicializar_banco()
     evento.run(debug=True, host='0.0.0.0')
