@@ -12,15 +12,15 @@ from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-# NOVO: Importações para SQLAlchemy
+# Importações para SQLAlchemy
 from flask_sqlalchemy import SQLAlchemy
-# NOVO: Importação para variáveis de ambiente
+# Importação para variáveis de ambiente
 from dotenv import load_dotenv
 
-# NOVO: Carregar variáveis de ambiente do arquivo .env (útil para desenvolvimento local)
+# Carregar variáveis de ambiente do arquivo .env (útil para desenvolvimento local)
 load_dotenv()
 
-# CORRIGIDO: Renomeado "evento" para "app" para compatibilidade com o Gunicorn no Render
+# Renomeado "evento" para "app" para compatibilidade com o Gunicorn no Render
 app = Flask(__name__, template_folder='modelos', static_folder='estatico')
 
 app.secret_key = os.environ.get('SECRET_KEY', 'uma_chave_secreta_muito_segura')
@@ -37,7 +37,7 @@ if not os.path.exists(app.config['GALLERY_FOLDER']):
 if not os.path.exists(app.config['BANNERS_FOLDER']):
     os.makedirs(app.config['BANNERS_FOLDER'])
 
-# NOVO: Lógica de seleção do banco de dados
+# Lógica de seleção do banco de dados
 USE_DATABASE = os.environ.get('DATABASE_URL') is not None
 
 if USE_DATABASE:
@@ -45,7 +45,7 @@ if USE_DATABASE:
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db = SQLAlchemy(app)
 
-    # NOVO: Modelos de dados para o banco
+    # Modelos de dados para o banco
     class Inscricao(db.Model):
         id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
         nome_completo = db.Column(db.String(100), nullable=False)
@@ -66,7 +66,7 @@ if USE_DATABASE:
         titulo = db.Column(db.String(255), nullable=False)
         subtitulo = db.Column(db.String(255), nullable=False)
 
-    # NOVO: Função para inicializar o banco de dados
+    # Função para inicializar o banco de dados
     def inicializar_banco():
         with app.app_context():
             db.create_all()
@@ -77,6 +77,8 @@ if USE_DATABASE:
                 evento_info = EventoInfo(titulo="Conferência de Discipulado", subtitulo="Discipulado e Legado - Formando a Próxima Geração")
                 db.session.add(evento_info)
             db.session.commit()
+    # NOVA CHAMADA: O banco é inicializado aqui, antes de qualquer rota ser acessada.
+    inicializar_banco()
 else:
     # A lógica original do dicionário permanece
     ADMIN_CREDENTIALS = {
@@ -90,7 +92,7 @@ EVENT_LOCAL = "Real Classic Bahia - Hotel e Convenções\nOrla da Pituba - Rua F
 EVENT_DATE = "13 e 14 de Setembro"
 EVENT_TIME = "Sábado: 18h / Domingo: 08h"
 
-# CORRIGIDO: Adicionado a verificação para o caso onde o banco está vazio
+# Corrigido: Adicionado a verificação para o caso onde o banco está vazio
 def get_event_title():
     if USE_DATABASE:
         info = EventoInfo.query.first()
@@ -101,7 +103,7 @@ def get_event_title():
                 return f.read().strip()
         return "Conferência de Discipulado"
 
-# CORRIGIDO: Adicionado a verificação para o caso onde o banco está vazio
+# Corrigido: Adicionado a verificação para o caso onde o banco está vazio
 def get_event_subtitle():
     if USE_DATABASE:
         info = EventoInfo.query.first()
@@ -606,6 +608,5 @@ def ingresso_pdf(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
-    if USE_DATABASE:
-        inicializar_banco()
+    # REMOVIDO: A inicialização agora acontece no topo do arquivo
     app.run(debug=True, host='0.0.0.0')
